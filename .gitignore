@@ -1,0 +1,13 @@
+node_modules/
+.wrangler/
+.dev.vars
+.env
+.env.*
+__pycache__/
+.pytest_cache/
+*.pyc
+output/
+*.pdf
+*.zip
+!examples/*.pdf
+.DS_Store
