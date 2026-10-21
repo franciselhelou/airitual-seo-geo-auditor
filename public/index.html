@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta name="theme-color" content="#111b2d" />
+  <meta name="robots" content="noindex, nofollow" />
+  <title>SEO & GEO Intelligence Audit | AI Ritual</title>
+  <meta name="description" content="Analyze SEO, AI search readiness, and digital presence. View evidence-based recommendations and download the complete report." />
+  <link rel="stylesheet" href="/styles.css" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js" defer></script>
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <header class="site-header"><div class="container navbar">
+    <a class="brand" href="/" aria-label="AI Ritual Audit home"><span class="mark">AR<span class="mark-dot">.</span></span><span class="brand-name">AI Ritual <span class="brand-soft">/ Visibility Intelligence</span></span></a>
+    <a class="nav-link" href="https://airitual.com" target="_blank" rel="noopener noreferrer">airitual.com <span aria-hidden="true">↗</span></a>
+  </div></header>
+  <main class="container">
+    <section id="landing" class="landing">
+      <div class="eyebrow"><span class="eyebrow-line"></span> SEO + GENERATIVE ENGINE OPTIMIZATION</div>
+      <h1>Your website's complete <span class="gradient">visibility picture.</span></h1>
+      <p class="lead">A detailed, evidence-based review of search visibility, AI readability, technical health, content gaps, and business presence. One report, clear priorities.</p>
+      <div class="intake card">
+        <div class="card-top"><div><span class="section-kicker">NEW AUDIT</span><h2>Analyze a website</h2></div><span class="chip"><span class="pulse"></span> GitHub-powered engine</span></div>
+        <form id="audit-form">
+          <label for="website">Website URL <strong aria-hidden="true">*</strong></label>
+          <input id="website" name="website" type="url" required placeholder="https://www.example.com" autocomplete="url" />
+          <div class="field-hint">Use the public URL of the business or organization you want to analyze.</div>
+          <label for="extra-urls">Additional sources <span class="optional">optional · up to 8 links</span></label>
+          <textarea id="extra-urls" name="extra_urls" rows="4" placeholder="https://www.google.com/maps/place/...&#10;https://www.yelp.com/biz/...&#10;https://www.linkedin.com/company/..."></textarea>
+          <div class="field-hint">One URL per line. Google Business, Yelp, LinkedIn, Facebook, or any other public business profile.</div>
+          <div class="turnstile-wrap"><div id="turnstile-container"></div><span id="turnstile-message">Loading verification…</span></div>
+          <div id="submit-error" class="notice error" hidden role="alert"></div>
+          <div class="action-row"><button id="submit-button" class="btn btn-primary" type="submit" disabled>Run comprehensive audit <span aria-hidden="true">→</span></button><span class="action-note">Crawl limits protect external websites</span></div>
+        </form>
+      </div>
+      <div class="feature-row"><div>◇ <span>Technical SEO</span></div><div>◇ <span>GEO readiness</span></div><div>◇ <span>Content & schema</span></div><div>◇ <span>Actionable PDF</span></div></div>
+      <p class="preview-link">Want to see the finished format? <a href="#sample" id="sample-link">Open sample report →</a></p>
+    </section>
+    <section id="job-progress" hidden class="progress-card card" aria-live="polite"><span class="section-kicker">AUDIT IN PROGRESS</span><h1 id="progress-title">Analyzing your website</h1><p id="progress-url" class="muted"></p><div class="loading-track"><div class="loading-bar"></div></div><p id="progress-message">Waiting for GitHub Actions to start…</p><p class="small muted">You can keep this tab open or bookmark the current report URL and return later.</p></section>
+    <section id="report" hidden>
+      <div class="report-top"><div><div class="eyebrow"><span class="eyebrow-line"></span> AI RITUAL INTELLIGENCE REPORT</div><h1 id="report-heading">SEO & GEO Audit</h1><p id="report-meta" class="muted"></p></div><div class="report-actions"><button type="button" class="btn btn-secondary" id="copy-link">Copy report link</button><a id="pdf-link" class="btn btn-primary" href="#">↓ Download PDF</a></div></div>
+      <div id="demo-warning" class="notice info" hidden>This is sample data for previewing the interface — no live audit was performed.</div>
+      <div class="score-grid" id="score-grid"></div>
+      <div class="kpi-grid" id="kpi-grid"></div>
+      <div class="report-layout">
+        <aside class="side-nav"><div class="side-title">REPORT SECTIONS</div><nav id="section-nav"></nav></aside>
+        <div class="report-main">
+          <section class="report-section card" id="overview"><div class="section-heading"><span class="section-kicker">01 / EXECUTIVE OVERVIEW</span><h2>Audit at a glance</h2></div><p id="executive-summary" class="summary"></p><div class="chart-wrap"><div><h3>Issues by category</h3><p class="muted small">Verified findings from accessible pages</p></div><div class="canvas-wrap"><canvas id="issue-chart" aria-label="Issues grouped by category" role="img"></canvas></div><div id="chart-fallback" class="chart-fallback"></div></div><div id="coverage" class="coverage"></div></section>
+          <section class="report-section card" id="findings"><div class="section-heading"><span class="section-kicker">02 / FULL EVIDENCE REGISTER</span><h2>Problems and opportunities</h2><p class="muted">Filter by severity or audit category. Every item includes its supporting URL.</p></div><div class="filter-bar"><select id="severity-filter" aria-label="Filter by severity"><option value="">All priorities</option><option value="critical">Critical</option><option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option><option value="info">Opportunities</option></select><select id="category-filter" aria-label="Filter by category"><option value="">All categories</option></select><input id="finding-search" type="search" placeholder="Search findings…" aria-label="Search findings" /></div><div id="finding-count" class="muted small"></div><div id="findings-list"></div></section>
+          <section class="report-section card" id="action-plan"><div class="section-heading"><span class="section-kicker">03 / IMPLEMENTATION ROADMAP</span><h2>What to fix first</h2></div><div id="roadmap"></div></section>
+          <section class="report-section card" id="pages"><div class="section-heading"><span class="section-kicker">04 / PAGE INVENTORY</span><h2>Pages analyzed</h2></div><div class="table-scroll"><table><thead><tr><th>Page</th><th>HTTP</th><th>Words</th><th>Title</th></tr></thead><tbody id="pages-tbody"></tbody></table></div></section>
+          <section class="report-section card" id="external"><div class="section-heading"><span class="section-kicker">05 / EXTERNAL SOURCES</span><h2>Additional business links</h2></div><div id="external-list"></div></section>
+          <section class="report-section card" id="method"><div class="section-heading"><span class="section-kicker">06 / TRANSPARENCY</span><h2>Methods & limitations</h2></div><div id="limitations"></div></section>
+        </div>
+      </div>
+      <footer class="report-footer">AI Ritual · <a href="https://airitual.com">airitual.com</a> · Evidence-backed SEO & GEO intelligence</footer>
+    </section>
+  </main>
+</body>
+</html>

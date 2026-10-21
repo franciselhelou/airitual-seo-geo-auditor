@@ -1,0 +1,197 @@
+{
+  "audit_id": "sample",
+  "status": "complete",
+  "website": "https://sample-business.test",
+  "created_at": "2026-10-21T09:00:00Z",
+  "completed_at": "2026-10-21T09:02:00Z",
+  "scores": {
+    "overall": 67,
+    "technical": 71,
+    "content": 62,
+    "geo": 58
+  },
+  "coverage": {
+    "pages_crawled": 24,
+    "urls_discovered": 81,
+    "pages_failed": 2,
+    "sitemap_status": "not_found_or_unavailable",
+    "robots_status": "present"
+  },
+  "summary": "This illustrative business website has a reasonable basic technical foundation but would benefit from stronger content, clearer entity information, and improved access to service explanations. The sample review identifies metadata weaknesses, incomplete machine-readable company details, and gaps in page structure. Priority recommendations focus on the most important service pages first, followed by structured data, internal linking, and a renewed sitemap review. The figures in this sample do not reflect a real website or live search rankings.",
+  "findings": [
+    {
+      "id": "AR-0001",
+      "title": "Missing meta description",
+      "category": "Content & On-page",
+      "severity": "high",
+      "url": "https://sample-business.test/services",
+      "evidence": "The services page has no meta description.",
+      "why": "Search snippets may lack helpful service context.",
+      "recommendation": "Write an accurate summary of the services and customer next step.",
+      "effort": "Low",
+      "confidence": "Medium"
+    },
+    {
+      "id": "AR-0002",
+      "title": "Inconsistent page titles",
+      "category": "Content & On-page",
+      "severity": "medium",
+      "url": "https://sample-business.test/about",
+      "evidence": "Two pages use the generic title \u201cHome\u201d.",
+      "why": "Searchers cannot easily distinguish pages.",
+      "recommendation": "Create descriptive, unique titles for each service page.",
+      "effort": "Low",
+      "confidence": "Medium"
+    },
+    {
+      "id": "AR-0003",
+      "title": "Missing descriptive image text",
+      "category": "Content & On-page",
+      "severity": "medium",
+      "url": "https://sample-business.test/portfolio",
+      "evidence": "Seven content images contain empty alt text.",
+      "why": "Useful imagery should be accessible.",
+      "recommendation": "Add alt descriptions for informative images and preserve empty alt on decorative images.",
+      "effort": "Low",
+      "confidence": "Medium"
+    },
+    {
+      "id": "AR-0004",
+      "title": "XML sitemap not verified",
+      "category": "Technical SEO",
+      "severity": "medium",
+      "url": "https://sample-business.test/sitemap.xml",
+      "evidence": "A standard sitemap location was not accessible.",
+      "why": "Search engines may miss deeper pages.",
+      "recommendation": "Verify sitemap coverage and publish a discoverable, valid XML sitemap.",
+      "effort": "Low",
+      "confidence": "Medium"
+    },
+    {
+      "id": "AR-0005",
+      "title": "Canonical declarations not detected",
+      "category": "Technical SEO",
+      "severity": "low",
+      "url": "https://sample-business.test/services",
+      "evidence": "No canonical link was found in the HTML.",
+      "why": "Duplicate URLs may split indexing signals.",
+      "recommendation": "Add canonical tags if needed for duplicate and alternate URLs.",
+      "effort": "Low",
+      "confidence": "Medium"
+    },
+    {
+      "id": "AR-0006",
+      "title": "Homepage organization structured data missing",
+      "category": "Structured Data",
+      "severity": "medium",
+      "url": "https://sample-business.test/",
+      "evidence": "No Organization JSON-LD was detected.",
+      "why": "Business identity information could be clearer to machines.",
+      "recommendation": "Add accurate JSON-LD with business name, website and verified contact information.",
+      "effort": "Medium",
+      "confidence": "Medium"
+    },
+    {
+      "id": "AR-0007",
+      "title": "Sparse service content",
+      "category": "GEO Readiness",
+      "severity": "high",
+      "url": "https://sample-business.test/services",
+      "evidence": "The key service page contains fewer than 100 readable words.",
+      "why": "AI tools have limited direct answers to extract.",
+      "recommendation": "Publish an accessible service description, FAQs, benefits and clear contact steps.",
+      "effort": "Medium",
+      "confidence": "Medium"
+    },
+    {
+      "id": "AR-0008",
+      "title": "Long text missing section headings",
+      "category": "GEO Readiness",
+      "severity": "low",
+      "url": "https://sample-business.test/about",
+      "evidence": "The company overview has no H2 or H3 headings.",
+      "why": "Structured passages are easier to navigate and cite.",
+      "recommendation": "Group topics under concise descriptive headings.",
+      "effort": "Medium",
+      "confidence": "Medium"
+    },
+    {
+      "id": "AR-0009",
+      "title": "Review Google Business listing",
+      "category": "Local & External",
+      "severity": "info",
+      "url": "https://www.google.com/maps",
+      "evidence": "Business listing could not be verified in this preview.",
+      "why": "Profile visibility and ownership were not assessed.",
+      "recommendation": "Use the business owner account or an authorized API for verification.",
+      "effort": "Medium",
+      "confidence": "Medium"
+    },
+    {
+      "id": "AR-0010",
+      "title": "Improve internal links",
+      "category": "Technical SEO",
+      "severity": "info",
+      "url": "https://sample-business.test/services",
+      "evidence": "Service pages lack contextual links to related resources.",
+      "why": "Visitors may struggle to find next steps.",
+      "recommendation": "Add relevant internal links to FAQs, examples and contact actions.",
+      "effort": "Medium",
+      "confidence": "Medium"
+    }
+  ],
+  "roadmap": [
+    {
+      "period": "First 7 days \u2014 Higher-priority fixes",
+      "tasks": [
+        "Publish complete text-based service descriptions",
+        "Add missing meta descriptions to key landing pages"
+      ]
+    },
+    {
+      "period": "Days 8\u201330 \u2014 Content and crawl improvements",
+      "tasks": [
+        "Review sitemap and canonical URLs",
+        "Implement accurate business identity structured data"
+      ]
+    },
+    {
+      "period": "Days 31\u201390 \u2014 Refinement and verification",
+      "tasks": [
+        "Improve internal linking",
+        "Repeat the audit to verify changes"
+      ]
+    }
+  ],
+  "pages": [
+    {
+      "url": "https://sample-business.test/",
+      "status": 200,
+      "word_count": 380,
+      "title": "Sample Business | Home"
+    },
+    {
+      "url": "https://sample-business.test/services",
+      "status": 200,
+      "word_count": 92,
+      "title": "Services"
+    },
+    {
+      "url": "https://sample-business.test/about",
+      "status": 200,
+      "word_count": 340,
+      "title": "Home"
+    }
+  ],
+  "external_profiles": [
+    {
+      "url": "https://www.google.com/maps",
+      "access": "not verified",
+      "note": "Sample only; no request made."
+    }
+  ],
+  "limitations": [
+    "This is illustrative demo content. No real website was crawled.",
+    "Real audits only scan public HTML and do not measure observed AI citations or rankings."
+  ]
+}
