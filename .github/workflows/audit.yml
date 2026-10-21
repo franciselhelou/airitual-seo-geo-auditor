@@ -1,0 +1,37 @@
+name: Website SEO & GEO audit
+on:
+  workflow_dispatch:
+    inputs:
+      audit_id:
+        description: 'R2 audit job UUID'
+        required: true
+        type: string
+permissions:
+  contents: read
+concurrency:
+  group: audit-${{ inputs.audit_id }}
+  cancel-in-progress: false
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+      - name: Run audit and upload result
+        env:
+          AUDIT_ID: ${{ inputs.audit_id }}
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          OPENAI_MODEL: ${{ vars.OPENAI_MODEL }}
+          PAGESPEED_API_KEY: ${{ secrets.PAGESPEED_API_KEY }}
+          PYTHONUNBUFFERED: '1'
+        run: python -m audit.runner --audit-id "$AUDIT_ID"
