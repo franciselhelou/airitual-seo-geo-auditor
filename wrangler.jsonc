@@ -6,9 +6,9 @@
   "assets": {"directory": "./public", "binding": "ASSETS"},
   "r2_buckets": [{"binding": "AUDITS", "bucket_name": "airitual-audit-reports"}],
   "vars": {
-    "GITHUB_OWNER": "REPLACE_WITH_GITHUB_USERNAME_OR_ORG",
+    "GITHUB_OWNER": "franciselhelou",
     "GITHUB_REPO": "airitual-seo-geo-auditor",
     "GITHUB_REF": "main",
-    "TURNSTILE_SITE_KEY": "REPLACE_WITH_TURNSTILE_SITE_KEY"
+    "TURNSTILE_SITE_KEY": "0x4AAAAAAFe3NPw2k9I52s3c"
   }
 }
