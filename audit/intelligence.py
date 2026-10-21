@@ -83,6 +83,25 @@ def _llm_json(model,api,payload,instructions):
     res=requests.post("https://api.openai.com/v1/responses",headers={"Authorization":f"Bearer {api}","Content-Type":"application/json"},
         json={"model":model,"instructions":instructions,"input":json.dumps(payload,ensure_ascii=False),
               "text":{"format":{"type":"json_object"}},"max_output_tokens":3400},timeout=115)
+    if not res.ok:
+        # Report only the provider's error details to the private GitHub Actions log.
+        # Do not print the API key, request body, or scraped website content.
+        try:
+            err=res.json().get("error", {})
+            if not isinstance(err, dict):
+                err={}
+        except (ValueError, AttributeError):
+            err={}
+        print(
+            "OpenAI API error: HTTP {} | type={} | code={} | param={} | message={}".format(
+                res.status_code,
+                str(err.get("type") or "unknown")[:60],
+                str(err.get("code") or "unknown")[:80],
+                str(err.get("param") or "none")[:80],
+                str(err.get("message") or "not provided")[:280],
+            ),
+            flush=True,
+        )
     res.raise_for_status()
     body=res.json()
     chunks=[c.get("text","") for o in body.get("output",[]) for c in o.get("content",[]) if c.get("type")=="output_text"]
