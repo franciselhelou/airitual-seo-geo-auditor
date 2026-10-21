@@ -79,33 +79,104 @@ def external_search(website,site_type,warnings):
         except Exception as e:warnings.append("Optional external search unavailable: "+str(e)[:120]);break
     return results[:10]
 
-def _llm_json(model,api,payload,instructions):
-    res=requests.post("https://api.openai.com/v1/responses",headers={"Authorization":f"Bearer {api}","Content-Type":"application/json"},
-        json={"model":model,"instructions":instructions,"input": "Return only a valid JSON object.\n\n" + json.dumps(payload, ensure_ascii=False),
-              "text":{"format":{"type":"json_object"}},"max_output_tokens":3400},timeout=115)
-    if not res.ok:
-        # Report only the provider's error details to the private GitHub Actions log.
-        # Do not print the API key, request body, or scraped website content.
-        try:
-            err=res.json().get("error", {})
-            if not isinstance(err, dict):
-                err={}
-        except (ValueError, AttributeError):
-            err={}
+def _llm_json(model, api, payload, instructions):
+    """Generate JSON research, explicitly diagnosing incomplete or invalid AI outputs.
+
+    GPT-5 family response limits include reasoning tokens, so a request may succeed
+    at HTTP level but return truncated, unparsable JSON. Retry such outputs once.
+    Never log the API key, scraped content, or full model response.
+    """
+    endpoint = "https://api.openai.com/v1/responses"
+    pages_count = len(payload.get("pages", [])) if isinstance(payload, dict) else 0
+    request_input = "Return only a valid JSON object.\n\n" + json.dumps(payload, ensure_ascii=False)
+    # The first attempt is normally sufficient; the higher second cap is used
+    # only for provider-truncated or malformed model JSON, not API HTTP errors.
+    limits = (8000, 12000)
+    last_error = None
+    for attempt, max_tokens in enumerate(limits, start=1):
+        body = {
+            "model": model,
+            "instructions": instructions,
+            "input": request_input,
+            "text": {"format": {"type": "json_object"}},
+            "max_output_tokens": max_tokens,
+        }
+        # Low reasoning effort leaves more output tokens for actual evidence.
+        # Restrict to model families known to accept this value.
+        if model in ("gpt-5", "gpt-5-mini", "gpt-5-nano"):
+            body["reasoning"] = {"effort": "low"}
         print(
-            "OpenAI API error: HTTP {} | type={} | code={} | param={} | message={}".format(
-                res.status_code,
-                str(err.get("type") or "unknown")[:60],
-                str(err.get("code") or "unknown")[:80],
-                str(err.get("param") or "none")[:80],
-                str(err.get("message") or "not provided")[:280],
-            ),
+            f"OpenAI research request: attempt={attempt}/{len(limits)} "
+            f"model={model} pages={pages_count} max_output_tokens={max_tokens}",
             flush=True,
         )
-    res.raise_for_status()
-    body=res.json()
-    chunks=[c.get("text","") for o in body.get("output",[]) for c in o.get("content",[]) if c.get("type")=="output_text"]
-    return json.loads("\n".join(chunks))
+        response = requests.post(
+            endpoint,
+            headers={"Authorization": f"Bearer {api}", "Content-Type": "application/json"},
+            json=body,
+            timeout=180,
+        )
+        if not response.ok:
+            # Keep provider error details but never expose credentials or bodies.
+            try:
+                error = response.json().get("error", {})
+                if not isinstance(error, dict):
+                    error = {}
+            except (ValueError, AttributeError):
+                error = {}
+            print(
+                "OpenAI API error: HTTP {} | type={} | code={} | param={} | message={}".format(
+                    response.status_code,
+                    str(error.get("type") or "unknown")[:60],
+                    str(error.get("code") or "unknown")[:80],
+                    str(error.get("param") or "none")[:80],
+                    str(error.get("message") or "not provided")[:280],
+                ),
+                flush=True,
+            )
+            response.raise_for_status()  # Invalid requests are not retried.
+        raw = response.json()
+        status = str(raw.get("status", "unknown"))
+        usage = raw.get("usage") or {}
+        details = usage.get("output_tokens_details") or {}
+        incomplete = raw.get("incomplete_details") or {}
+        reason = str(incomplete.get("reason") or "none")
+        print(
+            f"OpenAI response: HTTP {response.status_code} status={status} "
+            f"incomplete_reason={reason} input_tokens={usage.get('input_tokens', 'n/a')} "
+            f"output_tokens={usage.get('output_tokens', 'n/a')} "
+            f"reasoning_tokens={details.get('reasoning_tokens', 'n/a')}",
+            flush=True,
+        )
+        if status in ("failed", "cancelled", "in_progress", "queued"):
+            raise RuntimeError(f"OpenAI response was not completed: status={status}")
+        if status == "incomplete":
+            last_error = ValueError(f"OpenAI response incomplete: reason={reason}, max_output_tokens={max_tokens}")
+        else:
+            chunks = [
+                c.get("text", "")
+                for item in raw.get("output", [])
+                for c in item.get("content", [])
+                if c.get("type") == "output_text"
+            ]
+            result_text = "\n".join(chunks).strip()
+            if not result_text:
+                last_error = ValueError("OpenAI returned no output_text content")
+            else:
+                try:
+                    result = json.loads(result_text)
+                    if not isinstance(result, dict):
+                        raise ValueError("OpenAI JSON must be an object")
+                    return result
+                except (json.JSONDecodeError, ValueError) as err:
+                    last_error = ValueError(f"OpenAI JSON parse failed: {err}")
+        if attempt < len(limits):
+            print(
+                f"OpenAI research retry: {type(last_error).__name__}; "
+                "requesting a higher completion token limit",
+                flush=True,
+            )
+    raise last_error or RuntimeError("OpenAI research did not produce JSON")
 
 def _normalize_quote(s):return re.sub(r"\s+"," ",str(s)).strip().casefold()
 
