@@ -1,0 +1,14 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "airitual-seo-geo-audit",
+  "main": "src/worker.js",
+  "compatibility_date": "2026-10-20",
+  "assets": {"directory": "./public", "binding": "ASSETS"},
+  "r2_buckets": [{"binding": "AUDITS", "bucket_name": "airitual-audit-reports"}],
+  "vars": {
+    "GITHUB_OWNER": "REPLACE_WITH_GITHUB_USERNAME_OR_ORG",
+    "GITHUB_REPO": "airitual-seo-geo-auditor",
+    "GITHUB_REF": "main",
+    "TURNSTILE_SITE_KEY": "REPLACE_WITH_TURNSTILE_SITE_KEY"
+  }
+}
