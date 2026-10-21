@@ -81,7 +81,7 @@ def external_search(website,site_type,warnings):
 
 def _llm_json(model,api,payload,instructions):
     res=requests.post("https://api.openai.com/v1/responses",headers={"Authorization":f"Bearer {api}","Content-Type":"application/json"},
-        json={"model":model,"instructions":instructions,"input":json.dumps(payload,ensure_ascii=False),
+        json={"model":model,"instructions":instructions,"input": "Return only a valid JSON object.\n\n" + json.dumps(payload, ensure_ascii=False),
               "text":{"format":{"type":"json_object"}},"max_output_tokens":3400},timeout=115)
     if not res.ok:
         # Report only the provider's error details to the private GitHub Actions log.
