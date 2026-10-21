@@ -8,8 +8,8 @@ from xml.etree import ElementTree
 from bs4 import BeautifulSoup
 from .net import fetch, checked_url, UnsafeURL, AGENT
 
-MAX_PAGES = 32
-MAX_DISCOVERED = 240
+MAX_PAGES = 48
+MAX_DISCOVERED = 500
 MAX_EXTERNAL = 8
 
 
@@ -63,7 +63,7 @@ def extract(html, url, status):
     for el in soup(["script","style","noscript","nav","footer","header","svg"]):el.decompose()
     text=" ".join(soup.stripped_strings)
     words=re.findall(r"\b[\w'-]+\b",text)
-    return {"url":url,"status":status,"title":title[:190],"description":desc[:500],"h1":headings,"headings":h2,"word_count":len(words),"images":len(images),"images_missing_alt":no_alt,"canonical":canonical,"robots":robots,"schema_types":sorted(set(types)),"same_as":[str(s) for s in same_as][:20],"links":list(dict.fromkeys(links))[:400],"text":text[:18000]}
+    return {"url":url,"status":status,"title":title[:190],"description":desc[:500],"h1":headings,"headings":h2,"word_count":len(words),"images":len(images),"images_missing_alt":no_alt,"canonical":canonical,"robots":robots,"schema_types":sorted(set(types)),"same_as":[str(s) for s in same_as][:20],"links":list(dict.fromkeys(links))[:400],"text":text[:18000],"lang":(soup.html.get("lang","") if soup.html else "")}
 
 
 def get_robots(root, warnings):
@@ -107,7 +107,16 @@ def crawl_site(website,progress=lambda x:None,max_pages=MAX_PAGES):
         warnings.append("The site's robots.txt disallows the submitted homepage for the audit crawler.")
         return {"pages":[],"warnings":warnings,"urls_discovered":1,"pages_failed":0,"robots_status":"disallowed","sitemap_status":"not_checked"}
     sitemap_urls,sitemap_status=discover_sitemap(root,allowed,warnings)
-    queue=deque([norm(root)]+sitemap_urls[:70]); discovered=set(queue); processed=set();pages=[];failed=0
+    def content_priority(url):
+        """Spread a bounded crawl across high-intent sections before archives."""
+        path=urlparse(url).path.casefold()
+        important=("contact","service","permit","building","about","faq","government","departments","recreation","parks","business","development","hours","resident","public")
+        priority=-3 if any(t in path for t in important) else 0
+        priority+=2 if re.search(r"/20(?:1[0-9]|2[0-6])(?:/|-)",path) else 0
+        priority+=1 if len([s for s in path.split("/") if s])>3 else 0
+        return (priority, len(path),path)
+    sitemap_urls=sorted(sitemap_urls,key=content_priority)
+    queue=deque([norm(root)]+sitemap_urls[:95]); discovered=set(queue); processed=set();pages=[];failed=0
     while queue and len(pages)<max_pages:
         url=queue.popleft()
         if url in processed:continue

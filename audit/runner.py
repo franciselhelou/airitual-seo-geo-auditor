@@ -7,7 +7,8 @@ import re
 from pathlib import Path
 import boto3
 from .crawl import crawl_site,inspect_external
-from .evaluate import analyze_site,pagespeed,make_roadmap,baseline_summary,optional_ai_summary
+from .evaluate import analyze_site,pagespeed,make_roadmap,baseline_summary
+from .intelligence import research_intelligence
 from .pdf_report import create_pdf
 
 
@@ -29,7 +30,8 @@ def execute(job,on_progress=lambda msg:None):
     website=job["website"]
     warnings=[]
     on_progress("Checking crawler permissions and discovering pages")
-    crawled=crawl_site(website,progress=on_progress)
+    max_pages=max(8,min(90,int(os.getenv("AUDIT_MAX_PAGES") or "48")))
+    crawled=crawl_site(website,progress=on_progress,max_pages=max_pages)
     warnings.extend(crawled["warnings"])
     external=inspect_external(job.get("extra_urls",[]),progress=on_progress)
     on_progress("Calculating scores and evidence-backed findings")
@@ -40,19 +42,41 @@ def execute(job,on_progress=lambda msg:None):
     review.findings.sort(key=lambda f:({"critical":0,"high":1,"medium":2,"low":3,"info":4}.get(f["severity"],5),f["category"]))
     findings=review.findings
     coverage={"pages_crawled":len([p for p in crawled["pages"] if p["status"]==200]),"urls_discovered":crawled["urls_discovered"],"pages_failed":crawled["pages_failed"],"robots_status":crawled["robots_status"],"sitemap_status":crawled["sitemap_status"]}
-    on_progress("Preparing executive summary and prioritized action plan")
+    on_progress("Preparing organization-specific SEO/GEO intelligence")
+    intelligence=research_intelligence(website,[p for p in crawled["pages"] if p.get("status")==200],review,external,warnings,on_progress)
+    for item in intelligence.get("research_findings",[]):
+        sources=item.get("sources",[])
+        if len(sources)<2:continue
+        urls=[x["url"] for x in sources]
+        evidence=" | ".join(f"{x['url']}: {x['quote']}" for x in sources)
+        review.finding(item["title"],"Factual Consistency","medium",urls[0],evidence,item["why"],item["recommendation"],
+                       "Medium","Source-quote validated; conflict not independently confirmed",affected_urls=urls,
+                       kind="review",sources=[{"url":x["url"],"label":x["quote"][:155]} for x in sources],owner="Content owner / subject expert")
+    review.findings.sort(key=lambda f:({"critical":0,"high":1,"medium":2,"low":3,"info":4}.get(f["severity"],5),f["category"]))
+    findings=review.findings
     summary=baseline_summary(website,findings,coverage,review.scores())
-    summary=optional_ai_summary(website,summary,findings,warnings)
+    if intelligence.get("executive_analysis"):
+        summary+="\n\nAI research interpretation (verify editorial claims): "+intelligence["executive_analysis"]
     pages=[{k:p.get(k) for k in ("url","status","title","description","h1","headings","word_count","images","images_missing_alt","canonical","robots","schema_types")} for p in crawled["pages"]]
-    limitations=["Only publicly accessible, permitted HTML was evaluated. Pages behind authentication, JavaScript-only content, and uncrawled subpages may be missed.",
-     "Crawl limited to 32 pages; findings and scores describe the sample, not every URL on the website.",
-     "Scores reflect disclosed automated checks on accessible pages, not Google rankings, backlinks, conversions, or verified search traffic.",
-     "GEO readiness is an on-page heuristic, NOT an observed ChatGPT, Google AI Mode, or Perplexity citation rate.",
-     "Provided external URLs are checked for basic accessibility only; profile ownership, reviews, listing consistency, and local rankings are not independently validated.",
-     "Absence of detectable markup or content in fetched HTML does not prove it is absent in JavaScript-rendered or inaccessible views.",
-     "Missing optional data does not count as a passed or failed test. Human verification is required for legal, medical, financial, and time-sensitive claims."]
-    limitations.extend(warnings[:25])
-    return {"audit_id":job.get("audit_id","local"),"status":"complete","website":website,"created_at":job.get("created_at",now()),"completed_at":now(),"scores":review.scores(),"tests":review.tests,"coverage":coverage,"summary":summary,"findings":findings,"roadmap":make_roadmap(findings),"pages":pages,"external_profiles":external,"pagespeed":speed,"limitations":limitations,"engine_version":"1.0.0"}
+    pages_evaluated=coverage["pages_crawled"]
+    limitations=[
+      "This is a bounded, public-HTML sample; pages excluded by robots rules, uncrawled subpages, dynamic content, media and authenticated content may be missed.",
+      f"Analyzed {pages_evaluated} HTML pages out of {coverage['urls_discovered']} discovered URLs. This is not a comprehensive site-wide crawl.",
+      "Technical, content and GEO-readiness scores use disclosed sampled checks. GEO readiness is not measured AI visibility, and observed ChatGPT/Google AI/Perplexity citations were NOT tested.",
+      "Missing canonical declarations and optional meta descriptions are not automatically critical SEO defects.",
+      "Content gap suggestions mean NOT OBSERVED IN THE SAMPLE, not confirmed absent from the entire website.",
+      "Candidate factual conflicts from AI require editorial verification; quotations are checked against fetched pages but interpretation is not independently fact-checked.",
+      "External search snippets, when available, are leads for review, not verified facts or measured search rankings.",
+      "The supplied external profiles receive public-access checks only; ownership, ratings, listings and social analytics are not validated without authorized APIs.",
+      "Legal, medical, financial and time-sensitive claims require qualified human review. Search traffic, backlinks and conversions require separate authorized data sources.",
+    ]
+    limitations.extend(warnings[:18])
+    # The original web frontend still reads scores/findings/roadmap; V2 adds optional intelligence sections.
+    return {"audit_id":job.get("audit_id","local"),"status":"complete","website":website,
+            "created_at":job.get("created_at",now()),"completed_at":now(),"scores":review.scores(),"tests":review.tests,
+            "coverage":coverage,"summary":summary,"findings":findings,"roadmap":make_roadmap(findings),
+            "pages":pages,"external_profiles":external,"pagespeed":speed,"intelligence":intelligence,
+            "limitations":limitations,"engine_version":"2.0.0"}
 
 
 def cli():
