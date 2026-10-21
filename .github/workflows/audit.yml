@@ -32,6 +32,8 @@ jobs:
           R2_BUCKET: ${{ secrets.R2_BUCKET }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           OPENAI_MODEL: ${{ vars.OPENAI_MODEL }}
+          BRAVE_SEARCH_API_KEY: ${{ secrets.BRAVE_SEARCH_API_KEY }}
+          AUDIT_MAX_PAGES: ${{ vars.AUDIT_MAX_PAGES }}
           PAGESPEED_API_KEY: ${{ secrets.PAGESPEED_API_KEY }}
           PYTHONUNBUFFERED: '1'
         run: python -m audit.runner --audit-id "$AUDIT_ID"
