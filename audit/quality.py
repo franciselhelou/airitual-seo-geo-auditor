@@ -96,17 +96,30 @@ def roadmap(findings, opportunities):
 
 
 def audit_quality(result):
-    """Report quality flags are informative; do not manufacture a site score."""
+    """Fail the client-ready gate for contradictory or ungrounded measurements."""
     pages=result.get('pages',[]);findings=result.get('findings',[])
     canonical=[(p.get('url') or '').lower().rstrip('/') for p in pages if not p.get('error')]
     duplicates=sum(v-1 for v in Counter(canonical).values() if v>1)
+    detail=result.get('score_details') or {};seo=detail.get('seo') or {};geo=detail.get('geo') or {}
+    actions=result.get('action_summary') or {};scores=result.get('scores') or {}
+    benchmark=result.get('benchmarks') or {}
+    valid=[v for v in benchmark.get('results',[]) if v.get('status')=='completed' and v.get('valid_answer')
+           and v.get('target_cited') is not None and v.get('citations')]
+    urgent=sum(f.get('kind')=='issue' and f.get('severity') in ('critical','high') for f in findings)
+    opportunities=sum(bool(o.get('quote') and o.get('supporting_urls')) for o in (result.get('intelligence') or {}).get('content_opportunities',[]))
     checks={
-      'repeated_resolved_page_records':duplicates,
-      'self_referential_duplicate_findings':sum(' vs ' in f.get('evidence','') and
-         len(set(f.get('evidence','').split(' vs ')[-2:]))==1 for f in findings),
-      'missing_evidence_on_findings':sum(not f.get('evidence') for f in findings),
-      'unsourced_content_opportunities':sum(not p.get('quote') for p in result.get('intelligence',{}).get('content_opportunities',[])),
-      'pages_with_unreported_failure':sum(bool(p.get('error')) for p in pages)-result.get('coverage',{}).get('pages_failed',0),
+        'repeated_resolved_page_records':duplicates,
+        'missing_evidence_on_findings':sum(not f.get('evidence') for f in findings),
+        'unsourced_content_opportunities':sum(not p.get('quote') for p in (result.get('intelligence') or {}).get('content_opportunities',[])),
+        'pages_with_unreported_failure':max(0,sum(bool(p.get('error')) for p in pages)-result.get('coverage',{}).get('pages_failed',0)),
+        'missing_decision_metrics':int(bool(result.get('engine_version','').startswith('5.') and not (seo and geo and actions))),
+        'score_or_count_mismatch':int(bool(detail) and (scores.get('seo')!=seo.get('score') or scores.get('geo')!=geo.get('score')
+            or (result.get('coverage') or {}).get('pages_crawled',0)!=seo.get('pages')
+            or urgent!=actions.get('urgent_verified') or opportunities!=actions.get('content_proposals'))),
+        'citation_count_mismatch':int(bool(geo) and (geo.get('valid_tests')!=len(valid)
+            or geo.get('cited')!=sum(v.get('target_cited') is True for v in valid))),
+        'unverified_citations_scored':sum(v.get('status')=='completed' and v.get('target_cited') is not None and
+            (not v.get('citations') or v.get('citation_metadata_valid') is False) for v in benchmark.get('results',[]))
     }
-    status='pass' if all(x==0 for x in checks.values()) else 'needs_review'
-    return {'status':status,'checks':checks,'note':'Validation of document structure only; substantive editorial correctness remains unverified.'}
+    return {'status':'pass' if all(v==0 for v in checks.values()) else 'needs_review', 'checks':checks,
+            'note':'Failing checks block the client-ready label. Editorial meaning and external factual claims still need human review.'}
