@@ -41,7 +41,16 @@ def execute(job,on_progress=lambda msg:None):
         review.finding("Low measured mobile PageSpeed performance","Technical SEO","high",website,f"PageSpeed Insights mobile performance score: {speed['performance_score']}/100.","Slow mobile pages can affect experience and search performance.","Review the PageSpeed recommendations for this tested URL, prioritizing bottlenecks with verified impact.","Medium")
     review.findings.sort(key=lambda f:({"critical":0,"high":1,"medium":2,"low":3,"info":4}.get(f["severity"],5),f["category"]))
     findings=review.findings
-    coverage={"pages_crawled":len([p for p in crawled["pages"] if p["status"]==200]),"urls_discovered":crawled["urls_discovered"],"pages_failed":crawled["pages_failed"],"robots_status":crawled["robots_status"],"sitemap_status":crawled["sitemap_status"]}
+    html_pages = [p for p in crawled["pages"] if p.get("status") == 200 and not p.get("error")]
+    found = crawled["urls_discovered"]
+    coverage = {"pages_crawled": len(html_pages), "pages_attempted": len(crawled["pages"]),
+                "pages_unique_content": len([p for p in html_pages if not p.get("duplicate_content_of")]),
+                "urls_discovered": found, "candidate_sample_percent": round(100 * len(html_pages) / found, 1) if found else None,
+                "pages_failed": crawled["pages_failed"], "robots_status": crawled["robots_status"],
+                "sitemap_status": crawled["sitemap_status"],
+                "crawl_limit_reached": crawled.get("crawl_limit_reached", False),
+                "selection_method": crawled.get("selection_method", "bounded public HTML sample")}
+
     on_progress("Preparing organization-specific SEO/GEO intelligence")
     intelligence=research_intelligence(website,[p for p in crawled["pages"] if p.get("status")==200],review,external,warnings,on_progress)
     for item in intelligence.get("research_findings",[]):
@@ -57,14 +66,17 @@ def execute(job,on_progress=lambda msg:None):
     summary=baseline_summary(website,findings,coverage,review.scores())
     if intelligence.get("executive_analysis"):
         summary+="\n\nAI research interpretation (verify editorial claims): "+intelligence["executive_analysis"]
-    pages=[{k:p.get(k) for k in ("url","status","title","description","h1","headings","word_count","images","images_missing_alt","canonical","robots","schema_types")} for p in crawled["pages"]]
+    pages=[{k:p.get(k) for k in ("url","status","error","title","description","h1","headings","word_count","images","images_missing_alt","canonical","robots","schema_types","duplicate_content_of")} for p in crawled["pages"]]
     pages_evaluated=coverage["pages_crawled"]
     limitations=[
       "This is a bounded, public-HTML sample; pages excluded by robots rules, uncrawled subpages, dynamic content, media and authenticated content may be missed.",
-      f"Analyzed {pages_evaluated} HTML pages out of {coverage['urls_discovered']} discovered URLs. This is not a comprehensive site-wide crawl.",
-      "Technical, content and GEO-readiness scores use disclosed sampled checks. GEO readiness is not measured AI visibility, and observed ChatGPT/Google AI/Perplexity citations were NOT tested.",
+      f"Retrieved {pages_evaluated} HTML pages; {coverage['urls_discovered']} URLs were discovered as crawl candidates, not verified indexable HTML pages. Candidate sample: {coverage['candidate_sample_percent']}% (not a site-wide coverage estimate).",
+      "The overall site-health score is intentionally not calculated from this bounded sample. Technical and on-page percentages are only observed check pass rates with disclosed denominators.",
+      "GEO readiness and live AI-search citations were not measured. Suggested AI benchmark questions do not establish actual AI visibility.",
+      "Equivalent main-text page aliases are excluded from on-page check denominators; valid SEO canonicals/redirects still require separate verification.",
       "Missing canonical declarations and optional meta descriptions are not automatically critical SEO defects.",
-      "Content gap suggestions mean NOT OBSERVED IN THE SAMPLE, not confirmed absent from the entire website.",
+      "Any content improvement hypothesis requires full-site verification and user-demand research; text or title matching cannot prove a missing page.",
+      "High or medium priority review observations are not confirmed business-impact defects until verification is completed.",
       "Candidate factual conflicts from AI require editorial verification; quotations are checked against fetched pages but interpretation is not independently fact-checked.",
       "External search snippets, when available, are leads for review, not verified facts or measured search rankings.",
       "The supplied external profiles receive public-access checks only; ownership, ratings, listings and social analytics are not validated without authorized APIs.",
@@ -76,7 +88,12 @@ def execute(job,on_progress=lambda msg:None):
             "created_at":job.get("created_at",now()),"completed_at":now(),"scores":review.scores(),"tests":review.tests,
             "coverage":coverage,"summary":summary,"findings":findings,"roadmap":make_roadmap(findings),
             "pages":pages,"external_profiles":external,"pagespeed":speed,"intelligence":intelligence,
-            "limitations":limitations,"engine_version":"2.0.0"}
+            "quality": {"overall_health_measured": False, "geo_visibility_measured": False,
+                        "ai_research_status": intelligence.get("ai_research_status"),
+                        "assessment_scope": "bounded_public_html_sample",
+                        "review_items": len([f for f in findings if f.get("kind") != "issue"]),
+                        "confirmed_markup_issues": len([f for f in findings if f.get("kind") == "issue"])},
+            "limitations":limitations,"engine_version":"3.0.0"}
 
 
 def cli():

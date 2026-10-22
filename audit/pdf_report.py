@@ -68,26 +68,40 @@ def create_pdf(r):
 
     head("01  Executive assessment")
     txt(r.get("summary","No executive summary provided."))
-    mini("Scores and sample coverage")
-    table([["Dimension","Sample score","Interpretation"],
-       ["Overall website health",fmt(scores.get("overall")),"Weighted sample checks; not a ranking metric"],
-       ["Technical SEO",fmt(scores.get("technical")),"Measured accessibility and indexability signals"],
-       ["On-page content",fmt(scores.get("content")),"Core page-title coverage, sampled"],
-       ["GEO readiness",fmt(scores.get("geo")),"HTML answer-readiness heuristic; NOT actual AI visibility"]],
-       widths=[148,83,page_width-231])
+    mini("Observed test results and audit coverage")
+    tests=r.get("tests") or {}
+    def check_rate(dim):
+        t=tests.get(dim,{})
+        passed=t.get("passed",0);failed=t.get("failed",0)
+        return f"{passed}/{passed+failed} scored checks" if passed+failed else "No scored checks"
+    table([["Dimension", "Observed result", "What this measures"],
+        ["Overall website health", "Not assessed", "No site-wide health grade from sampled public HTML"],
+        ["HTML fetch success", fmt(scores.get("technical")), check_rate("technical")+"; attempted sample only"],
+        ["On-page essentials",fmt(scores.get("content")), check_rate("content")+"; titles, H1 and distinct titles"],
+        ["GEO / AI visibility", "Not measured", "Suggested questions are not tested AI answers or citations"]],
+        widths=[141,91,page_width-232])
     story.append(Spacer(1,10))
-    table([["Crawled","Discovered","Critical","High","Medium","Low / Review"],
-       [coverage.get("pages_crawled",0),coverage.get("urls_discovered",0),bysev["critical"],bysev["high"],bysev["medium"],bysev["low"]+bysev["info"]]],
-       widths=[82,82,77,65,75,page_width-381])
+    table([["HTML retrieved", "URLs found", "Attempted", "Markup issues", "Review items"],
+       [coverage.get("pages_crawled",0),coverage.get("urls_discovered",0),
+        coverage.get("pages_attempted",coverage.get("pages_crawled",0)),
+        sum(f.get("kind")=="issue" for f in findings),
+        sum(f.get("kind")!="issue" for f in findings)]],
+        widths=[95,102,95,103,page_width-395])
+    txt(f"Discovered URLs are crawl candidates, not a verified indexable-page inventory. "
+        f"Candidate retrieval rate: {coverage.get('candidate_sample_percent','unavailable')}%. "
+        f"Distinct sampled content pages: {coverage.get('pages_unique_content','unavailable')}. "
+        "A 100% observed check rate can still coexist with SEO opportunities not measured by that check.")
     mini("Organization and research context")
     txt("Inferred site type: "+intel.get("organization_type","Not established"))
     txt("AI research: "+intel.get("ai_research_status","not_run")+". Observed AI-search mentions/citations: NOT TESTED.")
     if r.get("pagespeed"):
         ps=r["pagespeed"];txt(f"Measured mobile PageSpeed performance: {ps.get('performance_score','unavailable')}/100. URL: {ps.get('source_url','')}.")
     else:txt("Mobile PageSpeed: Not measured or API unavailable.")
-    mini("Top corrective priorities")
+    mini("Top review and correction priorities")
     if findings:
-        for f in findings[:5]:li(f"{f['title']} — {f.get('affected_count',1)} affected URLs; {f.get('severity','review')} priority")
+        for f in findings[:5]:
+            classification = "CONFIRMED MARKUP OBSERVATION" if f.get("kind")=="issue" else "REQUIRES REVIEW"
+            li(f"{classification}: {f['title']} — {f.get('affected_count',1)} affected URLs; {f.get('severity','review')} triage priority")
     else:txt("No prioritized issues were produced from the accessible sample.")
 
     head("02  Verified source-backed observations")
@@ -106,7 +120,7 @@ def create_pdf(r):
                 txt('Observed quote: '+src.get("quote",""));story.append(link(src.get("url",""),src.get("url","")))
     else:txt("No source-quote-validated cross-page conflicts were generated. This does not establish that the site contains no contradictions.")
 
-    head("03  SEO health and grouped technical findings")
+    head("03  Grouped observations and validation status")
     bycat=Counter(f.get("category","Other") for f in findings)
     if bycat:table([["Finding category","Grouped observations"]]+[[name,str(n)] for name,n in bycat.most_common()],widths=[330,page_width-330])
     else:txt("No findings available.")
@@ -123,13 +137,14 @@ def create_pdf(r):
         chart=Table(chart_rows,colWidths=[214,34,page_width-248],hAlign="LEFT")
         chart.setStyle(TableStyle([("VALIGN",(0,0),(-1,-1),"MIDDLE"),("BOTTOMPADDING",(0,0),(-1,-1),6)]))
         story.append(chart)
-    txt("Findings are grouped by root cause. Affected page counts show how widespread an observation is; optional canonical-tag absence is not treated as an automatic SEO failure.")
+    txt("Findings are grouped by root cause. Priority denotes review order, not confirmed ranking impact. Optional canonical and meta-description absence are not automatic SEO failures.")
 
     head("04  Detailed findings and evidence")
     if not findings:txt("No source-linked findings were generated.")
     for f in findings:
         mini(f.get("title","Untitled finding"))
-        txt(f"{f.get('category')}  |  {f.get('severity','review').upper()}  |  {f.get('affected_count',1)} affected URL(s)  |  Effort: {f.get('effort','Review')}  |  Confidence: {f.get('confidence','Unknown')}")
+        txt(f"{f.get('category')} | {f.get('severity','review').upper()} triage priority | {f.get('affected_count',1)} URL(s) | Effort: {f.get('effort','Review')}")
+        txt("Validation: "+("Observed markup check" if f.get("kind")=="issue" else "Observed signal; impact needs manual verification")+" | Evidence confidence: "+str(f.get("confidence","Unknown")))
         txt("Evidence: "+f.get("evidence","None"))
         txt("Implication: "+f.get("why","Not given"))
         txt("Recommended action: "+f.get("recommendation","Not given"))
@@ -150,7 +165,10 @@ def create_pdf(r):
     head("06  Content coverage and proposed additions")
     txt("Not seen in sampled pages is NOT the same as missing from the website. Validate the existing URL inventory before commissioning new pages.")
     topics=intel.get("topic_coverage",[])
-    if topics:table([["Topic cluster","Observed in sampled titles?"]]+[[q.get("topic",""),"Yes" if q.get("status")=="sampled" else "Not seen — review"] for q in topics],widths=[285,page_width-285])
+    if topics:
+        def tstatus(q):
+            return {"sampled":"Title or H1 sampled", "mentioned_in_sample":"Body mentions found", "not_seen_in_sample":"Not seen; site-wide unknown"}.get(q.get("status"),"Unknown")
+        table([["Topic cluster","Observed in the bounded sample?"]]+[[q.get("topic",""),tstatus(q)] for q in topics],widths=[260,page_width-260])
     mini("Content opportunities")
     suggestions=intel.get("content_opportunities",[])
     for item in suggestions[:14]:
@@ -161,7 +179,10 @@ def create_pdf(r):
 
     head("07  Search intent and keyword strategy")
     txt("The following are exploratory query themes, NOT measured keywords, search volumes, rankings or SEO traffic projections.")
-    for cluster in intel.get("keyword_clusters",[])[:12]:
+    clusters = intel.get("keyword_clusters",[])
+    if not clusters:
+        txt("No source-specific query proposals were generated. Generic keywords are deliberately excluded.")
+    for cluster in clusters[:12]:
         mini(cluster.get("intent","Search topic"))
         for q in cluster.get("example_queries",[])[:4]:li(q)
 

@@ -1,7 +1,7 @@
 """Respectful HTML crawl with bounded scope and plain-text extraction."""
 import json
 import re
-from collections import deque
+from collections import Counter
 from urllib.parse import urlparse, urljoin, urldefrag
 from urllib.robotparser import RobotFileParser
 from xml.etree import ElementTree
@@ -9,7 +9,7 @@ from bs4 import BeautifulSoup
 from .net import fetch, checked_url, UnsafeURL, AGENT
 
 MAX_PAGES = 48
-MAX_DISCOVERED = 500
+MAX_DISCOVERED = 800
 MAX_EXTERNAL = 8
 
 
@@ -79,21 +79,55 @@ def get_robots(root, warnings):
         return None,"restricted"
 
 
-def discover_sitemap(root,allowed,warnings):
-    for path in ("/sitemap.xml","/sitemap_index.xml"):
+def discover_sitemap(root, allowed, warnings):
+    """Inspect common sitemap endpoints and a bounded number of sitemap-index children.
+
+    Discovery is candidate URL enumeration, not proof that URLs are indexable or HTML.
+    """
+    targets = [urljoin(root, "/sitemap.xml"), urljoin(root, "/sitemap_index.xml")]
+    seen_maps = set()
+    urls = []
+    while targets and len(seen_maps) < 5 and len(urls) < MAX_DISCOVERED:
+        target = targets.pop(0)
+        if target in seen_maps or not allowed(target):
+            continue
+        seen_maps.add(target)
         try:
-            response=fetch(urljoin(root,path),max_bytes=650_000)
-            if response["status"]!=200 or "xml" not in response["type"]:continue
-            xml=ElementTree.fromstring(response["text"])
-            urls=[]
-            for node in xml.iter():
-                if node.tag.lower().endswith("loc") and node.text:
-                    u=norm(node.text.strip())
-                    if allowed(u) and not u.lower().endswith((".pdf",".xml",".png",".jpg")):urls.append(u)
-            return list(dict.fromkeys(urls))[:120],"present"
-        except (Exception,) as e:
-            warnings.append("Sitemap parsing skipped for a candidate: "+str(e)[:100])
-    return [],"not_found_or_unavailable"
+            response = fetch(target, max_bytes=650_000)
+            if response["status"] != 200 or "xml" not in response["type"]:
+                continue
+            xml = ElementTree.fromstring(response["text"])
+            is_index = xml.tag.lower().endswith("sitemapindex")
+            locs = [norm(node.text.strip()) for node in xml.iter()
+                    if node.tag.lower().endswith("loc") and node.text]
+            if is_index:
+                for item in locs[:12]:
+                    if allowed(item) and item.lower().endswith(".xml") and item not in seen_maps:
+                        targets.append(item)
+            else:
+                urls.extend(item for item in locs if allowed(item)
+                            and not item.lower().endswith((".pdf", ".xml", ".png", ".jpg")))
+        except Exception as exc:
+            warnings.append("Sitemap parsing skipped for candidate: " + str(exc)[:100])
+    return list(dict.fromkeys(urls))[:MAX_DISCOVERED], "present" if urls else "not_found_or_unavailable"
+
+
+def content_theme(url):
+    path = urlparse(url).path.casefold()
+    themes = (
+        ("contact", ("contact", "directory", "city-hall", "staff", "hours")),
+        ("transactions", ("permit", "application", "license", "fee", "payment", "building", "inspection")),
+        ("resident", ("resident", "service", "trash", "water", "utility", "housing", "rental", "public-record")),
+        ("government", ("government", "council", "meeting", "agenda", "election", "mayor")),
+        ("safety", ("police", "fire", "public-safety", "emergency", "safety")),
+        ("recreation", ("park", "recreation", "event", "community", "attraction")),
+        ("business", ("economic", "business", "development", "zoning", "engineering")),
+        ("about", ("about", "faq", "home")),
+    )
+    for theme, keywords in themes:
+        if any(x in path for x in keywords):
+            return theme
+    return "other"
 
 
 def crawl_site(website,progress=lambda x:None,max_pages=MAX_PAGES):
@@ -107,18 +141,28 @@ def crawl_site(website,progress=lambda x:None,max_pages=MAX_PAGES):
         warnings.append("The site's robots.txt disallows the submitted homepage for the audit crawler.")
         return {"pages":[],"warnings":warnings,"urls_discovered":1,"pages_failed":0,"robots_status":"disallowed","sitemap_status":"not_checked"}
     sitemap_urls,sitemap_status=discover_sitemap(root,allowed,warnings)
-    def content_priority(url):
-        """Spread a bounded crawl across high-intent sections before archives."""
-        path=urlparse(url).path.casefold()
-        important=("contact","service","permit","building","about","faq","government","departments","recreation","parks","business","development","hours","resident","public")
-        priority=-3 if any(t in path for t in important) else 0
-        priority+=2 if re.search(r"/20(?:1[0-9]|2[0-6])(?:/|-)",path) else 0
-        priority+=1 if len([s for s in path.split("/") if s])>3 else 0
-        return (priority, len(path),path)
-    sitemap_urls=sorted(sitemap_urls,key=content_priority)
-    queue=deque([norm(root)]+sitemap_urls[:95]); discovered=set(queue); processed=set();pages=[];failed=0
-    while queue and len(pages)<max_pages:
-        url=queue.popleft()
+    # Balanced URL selection, rather than consuming the first 95 sitemap URLs.
+    # A new representative topic is considered before additional pages of a
+    # single section; no discovery-only URLs are treated as tested pages.
+    queue = [norm(root)] + [u for u in sitemap_urls if norm(u) != norm(root)]
+    queue = list(dict.fromkeys(queue))[:MAX_DISCOVERED-150]  # reserve capacity for homepage/internal links
+    discovered = set(queue)
+    processed = set()
+    pages = []
+    failed = 0
+    theme_counts = Counter()
+    while queue and len(pages) < max_pages:
+        if not pages:
+            url = queue.pop(0)  # Homepage first; supports internal link discovery.
+        else:
+            def candidate_rank(u):
+                theme = content_theme(u)
+                # Topic diversity first, then user-service page intent, then path depth.
+                important = theme != "other"
+                return (theme_counts[theme], 0 if important else 1,
+                        len([p for p in urlparse(u).path.split("/") if p]), len(u), u)
+            url = queue.pop(min(range(len(queue)), key=lambda i: candidate_rank(queue[i])))
+        theme_counts[content_theme(url)] += 1
         if url in processed:continue
         processed.add(url)
         if not allowed(url):continue
@@ -141,8 +185,18 @@ def crawl_site(website,progress=lambda x:None,max_pages=MAX_PAGES):
                 if link not in discovered and allowed(link):
                     discovered.add(link);queue.append(link)
         except Exception as exc:
-            failed+=1;warnings.append(f"Unable to crawl {url}: {str(exc)[:135]}")
-    return {"pages":pages,"warnings":warnings[:40],"urls_discovered":len(discovered),"pages_failed":failed,"robots_status":robots_status,"sitemap_status":sitemap_status}
+            failed += 1
+            warnings.append(f"Unable to crawl {url}: {str(exc)[:135]}")
+            # Record attempts that failed to fetch instead of excluding them
+            # from the sample-check denominator.
+            pages.append({"url": url, "status": 0, "error": type(exc).__name__, "title": "",
+                          "description": "", "h1": [], "headings": [], "word_count": 0,
+                          "images": 0, "images_missing_alt": 0, "canonical": "", "robots": "",
+                          "schema_types": [], "same_as": [], "links": [], "text": ""})
+    return {"pages": pages, "warnings": warnings[:40], "urls_discovered": len(discovered),
+            "pages_failed": failed, "robots_status": robots_status, "sitemap_status": sitemap_status,
+            "crawl_limit_reached": len(pages) >= max_pages and bool(queue),
+            "selection_method": "homepage first; balanced high-intent section sampling of discovered candidates"}
 
 
 def inspect_external(urls,progress=lambda x:None):
