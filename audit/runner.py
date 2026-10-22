@@ -58,8 +58,17 @@ def execute(job,on_progress=lambda msg:None):
     else:
         warnings.append('PageSpeed Insights: not configured')
     speed=speeds[0] if speeds else None
-    if speed is not None and speed.get("performance_score") is not None and speed["performance_score"]<50:
-        review.finding("Low measured mobile PageSpeed performance","Technical SEO","high",website,f"PageSpeed Insights mobile performance score: {speed['performance_score']}/100.","Slow mobile pages can affect experience and search performance.","Review the PageSpeed recommendations for this tested URL, prioritizing bottlenecks with verified impact.","Medium")
+    for measured in speeds:
+        value=measured.get('performance_score')
+        if not isinstance(value,(int,float)) or value>=90:continue
+        target=measured['tested_url']
+        severity='high' if value<50 else 'medium'
+        review.finding('Low measured mobile performance on a sampled page', 'Page Experience', severity,
+            target, f"Mobile PageSpeed Insights laboratory performance {value}/100 on {target}.",
+            'Low laboratory performance may indicate a difficult mobile experience; verify repeatability and individual audit opportunities.',
+            'Repeat PageSpeed on this URL, inspect LCP/INP/CLS where available and prioritize verified render-blocking, image or script bottlenecks.',
+            'Medium','High (single lab measurement); impact needs verification',affected_urls=[target],kind='review',
+            validation_status='measured_performance_repeat_to_confirm',owner='Web performance engineer')
     review.findings.sort(key=lambda f:({"critical":0,"high":1,"medium":2,"low":3,"info":4}.get(f["severity"],5),f["category"]))
     findings=review.findings
     html_pages = [p for p in crawled["pages"] if p.get("status") == 200 and not p.get("error")]
@@ -76,7 +85,7 @@ def execute(job,on_progress=lambda msg:None):
     on_progress("Preparing organization-specific SEO/GEO intelligence")
     intelligence=research_intelligence(website,[p for p in crawled["pages"] if p.get("status")==200],review,external,warnings,on_progress,discovered_urls=crawled.get("discovered_urls",[]))
     on_progress('Testing public AI search citations')
-    benchmark_questions=plan_questions(website,html_pages,intelligence.get('organization_type',''))
+    benchmark_questions=plan_questions(website,html_pages,intelligence.get('organization_type',''),suggestions=intelligence.get('geo_questions',[]),limit=8)
     benchmarks=run_benchmarks(website,benchmark_questions,on_progress)
     intelligence['geo_questions']=benchmark_questions  # Only grounded executable questions are shown.
     on_progress('Calculating auditable SEO and GEO sample scores')
@@ -121,7 +130,8 @@ def execute(job,on_progress=lambda msg:None):
     # The original web frontend still reads scores/findings/roadmap; V2 adds optional intelligence sections.
     result={"audit_id":job.get("audit_id","local"),"status":"complete","website":website,
             "created_at":job.get("created_at",now()),"completed_at":now(),
-            "scores":{**review.scores(),"seo":seo_detail['score'],"geo":geo_detail['score']},"tests":review.tests,
+            "scores":{**review.scores(),"seo":seo_detail['score'],"geo":geo_detail['score']},
+            "score_details":{"seo":seo_detail,"geo":geo_detail},"action_summary":action_summary,"tests":review.tests,
             "coverage":coverage,"summary":summary,"findings":findings,"roadmap":build_roadmap(findings,intelligence.get("content_opportunities",[])),
             "pages":pages,"external_profiles":external,"pagespeed":speed,"pagespeed_results":speeds,
             "benchmarks":benchmarks,"intelligence":intelligence,
@@ -132,8 +142,9 @@ def execute(job,on_progress=lambda msg:None):
                         "assessment_scope": "bounded_public_html_sample",
                         "review_items": len([f for f in findings if f.get("kind") != "issue"]),
                         "confirmed_markup_issues": len([f for f in findings if f.get("kind") == "issue"])},
-            "limitations":limitations,"engine_version":"5.0.0"}
+            "limitations":limitations,"engine_version":"5.1.0"}
     result['quality_gate']=audit_quality(result)
+    result['publication_status']='client_ready' if result['quality_gate']['status']=='pass' else 'draft_validation_required'
     return result
 
 
