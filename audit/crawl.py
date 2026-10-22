@@ -166,7 +166,7 @@ def crawl_site(website, progress=lambda x:None, max_pages=MAX_PAGES):
                 "robots_status":"disallowed","sitemap_status":"not_checked"}
     sitemap_urls,sitemap_status=discover_sitemap(root,allowed,warnings)
     queue=[root];discovered={root};processed=set();completed=set();seen_content={}
-    alias_records=[];pages=[];failed=0;attempts=0
+    alias_records=[];pages=[];failed=0;attempts=0;excluded_resources=[]
     theme_counts=Counter()
     def enqueue(url):
         if len(discovered)>=MAX_DISCOVERED:return
@@ -189,7 +189,9 @@ def crawl_site(website, progress=lambda x:None, max_pages=MAX_PAGES):
         if url in processed:continue
         processed.add(url)
         if not allowed(url):continue
-        if re.search(r"\.(?:pdf|docx?|xlsx?|png|jpg|jpeg|gif|svg|zip)(?:$|\?)",url,re.I):continue
+        if re.search(r"\.(?:pdf|docx?|xlsx?|png|jpg|jpeg|gif|svg|zip)(?:$|\?)",url,re.I):
+            excluded_resources.append({'url':url,'reason':'non_html_extension_not_fetched'})
+            continue
         theme_counts[content_theme(url)]+=1
         attempts+=1
         progress(f"Crawling unique HTML {len(pages)+1}/{max_pages}: {urlparse(url).path or '/'}")
@@ -203,11 +205,18 @@ def crawl_site(website, progress=lambda x:None, max_pages=MAX_PAGES):
                 alias_records.append({"requested":url,"final":target,"reason":"same_resolved_url"})
                 continue
             completed.add(final)
-            if response['status']>=400 or response['error'] or 'html' not in response['type']:
+            ctype=response.get('type','')
+            # PDF, images, XML and other successful document responses are not
+            # HTML errors. Record internally rather than penalizing the website.
+            if response['status'] in (200,206) and 'html' not in ctype:
+                excluded_resources.append({'url':target,'requested_url':url,
+                                           'status':response['status'],'content_type':ctype,
+                                           'reason':'successful_non_html_resource'})
+                continue
+            if response['status']>=400 or response['error'] or 'html' not in ctype:
                 failed+=1
-                # Preserve failures in the inventory, without claiming they are SEO defects.
                 pages.append({"url":target,"requested_url":url,"status":response['status'],
-                             "error":response['error'] or f"HTTP {response['status']}",
+                             "type":ctype,"error":response['error'] or f"HTTP {response['status']}",
                              "title":"","description":"","h1":[],"headings":[],
                              "word_count":0,"images":0,"images_missing_alt":0,
                              "canonical":"","robots":"","schema_types":[],
@@ -215,6 +224,7 @@ def crawl_site(website, progress=lambda x:None, max_pages=MAX_PAGES):
                 continue
             page=extract(response['text'],target,response['status'])
             page['requested_url']=url
+            page['type']=ctype
             signature=sha256((page.get('title','').lower()+'\n'+ ' '.join(page.get('text','').lower().split())).encode()).hexdigest()
             if len(page.get('text',''))>=120 and signature in seen_content:
                 alias_records.append({"requested":url,"final":target,
@@ -240,7 +250,8 @@ def crawl_site(website, progress=lambda x:None, max_pages=MAX_PAGES):
             "crawl_limit_reached":bool(queue) and (len(pages)>=max_pages or attempts>=max_attempts),
             "selection_method":"homepage and balanced service-area selection; redirect/content alias filtering",
             "pages_attempted":attempts,"alias_records":alias_records[:150],
-            "discovered_urls":list(sorted(discovered))[:MAX_DISCOVERED]}
+            "discovered_urls":list(sorted(discovered))[:MAX_DISCOVERED],
+            "excluded_resources":excluded_resources[:200]}
 
 
 def inspect_external(urls,progress=lambda x:None):

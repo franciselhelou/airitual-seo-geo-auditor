@@ -68,30 +68,27 @@ def create_pdf(r):
 
     head("01  Executive assessment")
     txt(r.get("summary","No executive summary provided."))
-    mini("Observed test results and audit coverage")
-    tests=r.get("tests") or {}
-    def check_rate(dim):
-        t=tests.get(dim,{})
-        passed=t.get("passed",0);failed=t.get("failed",0)
-        return f"{passed}/{passed+failed} scored checks" if passed+failed else "No scored checks"
-    table([["Dimension", "Observed result", "What this measures"],
-        ["Overall website health", "Not assessed", "No site-wide health grade from sampled public HTML"],
-        ["HTML fetch success", fmt(scores.get("technical")), check_rate("technical")+"; attempted sample only"],
-        ["On-page essentials",fmt(scores.get("content")), check_rate("content")+"; titles, H1 and distinct titles"],
-        ["Broad AI visibility", "Not measured", "API samples are presented separately; consumer rankings unavailable"]],
-        widths=[141,91,page_width-232])
-    story.append(Spacer(1,10))
-    table([["HTML retrieved", "URLs found", "Attempted", "Markup issues", "Review items"],
-       [coverage.get("pages_crawled",0),coverage.get("urls_discovered",0),
-        coverage.get("pages_attempted",coverage.get("pages_crawled",0)),
-        sum(f.get("kind")=="issue" for f in findings),
-        sum(f.get("kind")!="issue" for f in findings)]],
-        widths=[95,102,95,103,page_width-395])
-    txt(f"Discovered URLs are crawl candidates, not a verified indexable-page inventory. "
-        f"Candidate retrieval rate: {coverage.get('candidate_sample_percent','unavailable')}%. "
-        f"Distinct sampled content pages: {coverage.get('pages_unique_content','unavailable')}. "
-        f"HTTP fetches attempted: {coverage.get('fetch_requests','unavailable')}; aliases filtered: {coverage.get('aliases_skipped',0)}. "
-        "A 100% observed check rate can still coexist with SEO opportunities not measured by that check.")
+    mini("Decision metrics — public sample only")
+    detail=r.get('score_details') or {}
+    seo=detail.get('seo') or {};geo=detail.get('geo') or {}
+    actions=r.get('action_summary') or {}
+    table([["Indicator", "Result", "Interpretation"],
+        ["SEO audit score",fmt(seo.get('score')),"Weighted observed SEO checks on sampled pages"],
+        ["AI citation benchmark",fmt(geo.get('score')),
+         str(geo.get('cited',0))+"/"+str(geo.get('valid_tests',0))+" valid API tests cited the domain"],
+        ["Confirmed urgent issues",str(actions.get('urgent_verified',0)),"High-impact, observed defects only"],
+        ["High-priority verification",str(actions.get('high_priority_to_verify',0)),"Not yet proven problems"],
+        ["Research opportunities",str(actions.get('content_proposals',0)),"Source-quoted hypotheses to validate"]],
+        widths=[143,93,page_width-236])
+    txt(f"Scope: {seo.get('pages',0)} HTML pages sampled; "
+        f"SEO measured weight: {seo.get('weight_covered',0)} of 100. "
+        f"AI calls attempted: {geo.get('attempts',0)}; valid citation tests: {geo.get('valid_tests',0)}. "
+        "These are transparent audit measures, not verified whole-site rankings or search traffic.")
+    if seo.get('breakdown'):
+        mini('SEO scoring details')
+        table([["Observed check","Pass rate","Sample"]]+[
+            [i['check'].replace('_',' ').title(),str(i['result_percent'])+'%',str(i['samples'])]
+            for i in seo['breakdown']],widths=[272,105,page_width-377])
     mini("Organization and research context")
     txt("Inferred site type: "+intel.get("organization_type","Not established"))
     txt("AI research: "+intel.get("ai_research_status","not_run")+". Public AI citation benchmark: "+(r.get('benchmarks') or {}).get('status','unavailable')+".")
@@ -113,7 +110,6 @@ def create_pdf(r):
             if it.get('quote'):txt("Source passage: "+it['quote'][:400])
             story.append(link(it.get("url",""),it.get("url","")))
     else:txt("No individual strengths were established from the current sample.")
-
     conflicts=intel.get("research_findings",[])
     if conflicts:mini("Information consistency candidates")
     if conflicts:
@@ -169,25 +165,20 @@ def create_pdf(r):
              str(item.get('target_cited',0))+" / "+str(item.get('tests_completed',0)) if item.get('tests_completed') else 'Unavailable']
             for provider,item in summaries.items()],widths=[190,148,page_width-338])
         for item in (benchmark.get('results') or [])[:24]:
-            if item.get('status')!='completed':continue
+            if item.get('status')!='completed' or not item.get('valid_answer'):continue
             mini(item.get('provider','')+" — "+item.get('question','')[:100])
             txt('Domain cited: '+('Yes' if item.get('target_cited') else 'No')+'. Answer excerpt: '+item.get('answer','')[:340])
             for cite in item.get('citations',[])[:4]:story.append(link(cite.get('url','')))
     else:txt("No public AI API benchmark results are available for this audit.")
-    mini("Selected AI-answer benchmark questions")
+    mini("Source-linked public benchmark prompts")
     questions=intel.get("geo_questions",[])
     if questions:
-        for q in questions[:12]:li(q.get("question","") if isinstance(q,dict) else str(q))
+        for q in questions[:8]:
+            li(q.get("question","") if isinstance(q,dict) else str(q))
     else:txt("AI benchmark questions were not generated.")
 
-    head("06  Content coverage and proposed additions")
-    txt("A bounded crawl cannot establish content is absent across a whole website. Check matching resource links before creating pages.")
-    topics=intel.get("topic_coverage",[])
-    if topics:
-        def tstatus(q):
-            return {"sampled":"Title or H1 sampled", "mentioned_in_sample":"Body mentions found", "not_seen_in_sample":"Not seen; site-wide unknown"}.get(q.get("status"),"Unknown")
-        table([["Topic cluster","Observed in the bounded sample?"]]+[[q.get("topic",""),tstatus(q)] for q in topics],widths=[260,page_width-260])
-    mini("Content opportunities")
+    head("06  Prioritized content opportunities")
+    txt("Recommendations below are hypotheses supported by source excerpts. Check related existing pages before commissioning content.")
     suggestions=intel.get("content_opportunities",[])
     for item in suggestions[:14]:
         mini(item.get("title","Content opportunity"));txt(item.get("why",""));txt("Suggested work: "+item.get("proposed_content",""))
@@ -211,57 +202,21 @@ def create_pdf(r):
     txt("Detected JSON-LD types in sampled responses: "+(", ".join(observed) if observed else "None detected; rendered markup was not independently checked."))
     txt("Before implementing JSON-LD, validate the current rendered markup and choose an organization type supported by the site's publicly stated identity. No search enhancements are guaranteed.")
 
-    head("09  External presence and source research")
-    profiles=r.get("external_profiles",[])
-    if profiles:
-        for item in profiles:
-            txt(f"Submitted profile: {item.get('access','unknown')}. {item.get('note','')}");story.append(link(item.get("url","")))
-    else:txt("No optional business-directory or social profile URLs were submitted.")
-    mini("Optional web-search observations")
-    items=intel.get("external_research",[])
-    if items:
-        for i in items[:10]:
-            txt(i.get("title",""));txt("Search snippet (unverified): "+i.get("snippet",""));story.append(link(i.get("url","")))
-    else:txt("External search was not configured or did not return usable results. No competitor/ranking analysis is claimed.")
-
     head("10  Prioritized 90-day work plan")
     for phase in r.get("roadmap",[]):
         mini(phase.get("period",""))
         for task in phase.get("tasks",[])[:12]:li(task)
 
-    head("11  Public measurement and validation plan")
+    head("11  Audit scope and supporting records")
+    txt("The downloadable structured JSON result retains each sampled page, excluded document, provider response, citation and source evidence. Page inventories and optional profiles are not repeated as client-facing report sections.")
+    quality=r.get('quality_gate') or {}
+    txt('Evidence quality gate: '+str(quality.get('status','not_run'))+'. Public-only bounded crawl; independently verify high-impact corrections.')
     speed_results=r.get('pagespeed_results') or []
     if speed_results:
-        mini('Public mobile PageSpeed measurements')
-        for item in speed_results:
-            txt(f"{item.get('tested_url','')} — performance: {item.get('performance_score','unavailable')}/100; metrics: {item.get('metrics',{})}")
-    bench=r.get('benchmarks') or {}
-    if bench.get('results'):
-        txt('Repeat the recorded '+str(bench.get('questions_selected',0))+' public AI questions, with the same providers, on a fixed schedule; compare source citations and answer quality.')
-    txt('Track measured public indicators: successful distinct HTML pages, verified fixes and review resolutions, structured markup validation, and any completed mobile PageSpeed measurements.')
-    quality=r.get('quality_gate') or {}
-    txt('Document quality gate: '+str(quality.get('status','not_run'))+'. '+str(quality.get('checks',{})))
-
-    head("12  Page inventory (sampled)")
-    page_rows=[["Final URL (scheme and path)","HTTP","Words","Page title"]]
-    for page in r.get("pages",[]):
-        page_url=page.get('url','')
-        parsed=urlparse(page_url)
-        path=f"{parsed.scheme}://{parsed.netloc}{parsed.path or '/'}"
-        page_rows.append([path[:85],str(page.get("status","")),str(page.get("word_count",0)),str(page.get("title","")[:95])])
-    if len(page_rows)>1:table(page_rows,widths=[184,43,50,page_width-277])
-    else:txt("No HTML pages collected.")
-
-    head("13  Complete affected-URL register")
-    for f in findings:
-        urls=f.get("affected_urls",[])
-        if not urls:continue
-        mini(f.get("id","")+" — "+f.get("title",""))
-        for u in urls:story.append(link(u))
-
-    head("14  Methodology, coverage and limitations")
-    for line in r.get("limitations",[])[:10]:li(line)
-    txt("Method: public HTML, observed source excerpts, measured provider calls and conditional research hypotheses. Private site-owner data is never requested. Confirm editorial or regulatory decisions with responsible organizations.")
+        mini('Public mobile PageSpeed tests')
+        for i in speed_results[:4]:
+            txt(f"{i.get('tested_url','')} — mobile performance: {i.get('performance_score','unavailable')}/100")
+    for line in r.get('limitations',[])[:3]:txt(line)
 
     def draw(canvas,doc):
         canvas.saveState();w,h=A4

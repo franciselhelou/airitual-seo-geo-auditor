@@ -89,9 +89,17 @@ def analyze_site(website, crawl, external, progress=lambda s: None):
     for p in pages:
         # Check HTTP availability across the *attempted* sample, including failures.
         # Do not infer status of discovered-but-unrequested URLs.
-        r.test("technical", p.get("status") == 200 and not p.get("error"), "html_fetch_200")
-        if p.get("status", 0) >= 400 or p.get("error"):
+        # Only confirmed HTML fetches and genuine HTML error responses are
+        # eligible. Blocked (403/429) and non-HTML resources are not failures.
+        status=p.get('status',0)
+        if status==200 and not p.get('error'):
+            r.test("technical",True,"html_fetch_200")
+        elif status in (404,410) or status>=500:
+            r.test("technical",False,"html_fetch_200")
             buckets["http"].append(p)
+        else:
+            r.test("technical",None,"html_fetch_200")
+            if status in (401,403,429):buckets['restricted'].append(p)
 
     # Distinct content is evaluated once to prevent aliases artificially
     # inflating scores (e.g. / vs /1/Home).
@@ -127,12 +135,19 @@ def analyze_site(website, crawl, external, progress=lambda s: None):
 
     if buckets["http"]:
         ps = buckets["http"]
-        r.finding("Failed HTML requests in the attempted sample", "Technical SEO", "high", ps[0]["url"],
+        r.finding("Confirmed unsuccessful HTML URL responses", "Technical SEO", "medium", ps[0]["url"],
                   f"{len(ps)} attempted URL(s) failed; examples: " +
                   ", ".join(f"{p['url']} (HTTP {p.get('status', 'unknown')})" for p in ps[:4]),
                   "A failed fetch may be a broken page, temporary server issue, or crawler restriction.",
                   "Retry affected links from a normal browser and check server logs before recommending removal or redirects.",
                   "Medium", affected_urls=[p["url"] for p in ps], kind="review")
+    if buckets['restricted']:
+        ps=buckets['restricted']
+        r.finding('Crawler access restrictions require verification','Crawl availability','low',ps[0]['url'],
+                  f"{len(ps)} request(s) restricted or throttled; server responses may differ for browsers and crawlers.",
+                  'An access restriction alone is not a broken public page.',
+                  'Check robots rules, request policies and server logs before changing the site.',
+                  'Low',affected_urls=[p['url'] for p in ps],kind='review')
     if buckets["noindex"]:
         ps = buckets["noindex"]
         r.finding("Review indexing intent of noindex pages", "Technical SEO", "medium", ps[0]["url"],
