@@ -35,5 +35,9 @@ jobs:
           BRAVE_SEARCH_API_KEY: ${{ secrets.BRAVE_SEARCH_API_KEY }}
           AUDIT_MAX_PAGES: ${{ vars.AUDIT_MAX_PAGES }}
           PAGESPEED_API_KEY: ${{ secrets.PAGESPEED_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          PERPLEXITY_API_KEY: ${{ secrets.PERPLEXITY_API_KEY }}
+          GEMINI_MODEL: ${{ vars.GEMINI_MODEL }}
+          AUDIT_BENCHMARK_QUESTIONS: ${{ vars.AUDIT_BENCHMARK_QUESTIONS }}
           PYTHONUNBUFFERED: '1'
         run: python -m audit.runner --audit-id "$AUDIT_ID"

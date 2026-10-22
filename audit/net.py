@@ -73,7 +73,8 @@ def fetch(url: str, *, max_bytes=MAX_BYTES, timeout=(6, 11), max_redirects=4, al
                 if size > max_bytes:
                     return {"url": current, "status": response.status_code, "text": "", "type": content_type, "error": "Response exceeded byte limit"}
                 chunks.append(chunk)
-            # Decode bytes already buffered, without rereading a streamed response.
+            # Never call apparent_encoding after consuming a streamed response.
+            # Prefer explicit charset; otherwise decode buffered bytes without a second read.
             data = b"".join(chunks)
             charset = response.encoding
             if not charset or charset.lower() == "iso-8859-1":

@@ -77,8 +77,10 @@ def analyze_site(website, crawl, external, progress=lambda s: None):
     for p in valid:
         fingerprint = _fingerprint(p)
         if fingerprint and fingerprint in fingerprint_primary:
-            p["duplicate_content_of"] = fingerprint_primary[fingerprint]["url"]
-            buckets["exact_alias"].append(p)
+            primary=fingerprint_primary[fingerprint]
+            if p['url'].rstrip('/') != primary['url'].rstrip('/'):
+                p["duplicate_content_of"] = primary["url"]
+                buckets["exact_alias"].append(p)
         else:
             unique.append(p)
             if fingerprint:
@@ -195,7 +197,8 @@ def analyze_site(website, crawl, external, progress=lambda s: None):
                   "Review page intent and set descriptive, distinguishable titles if pages serve different purposes.",
                   "Medium", confidence="Medium", affected_urls=affected)
     if buckets["exact_alias"]:
-        ps = buckets["exact_alias"]
+        ps = [p for p in buckets["exact_alias"] if p['url']!=p.get('duplicate_content_of')]
+        if not ps:ps=[]
         r.finding("Equivalent content accessible at multiple URLs", "Canonicalization review", "low", ps[0]["url"],
                   f"{len(ps)} sampled URL(s) have the same normalized extracted main text as another sampled URL; "
                   f"example {ps[0]['url']} vs {ps[0]['duplicate_content_of']}.",
