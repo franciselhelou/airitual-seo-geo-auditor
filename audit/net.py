@@ -43,7 +43,7 @@ def checked_url(raw: str) -> str:
     return urldefrag(raw)[0]
 
 
-def fetch(url: str, *, max_bytes=MAX_BYTES, timeout=(6, 11), max_redirects=4):
+def fetch(url: str, *, max_bytes=MAX_BYTES, timeout=(6, 11), max_redirects=4, allow_url=None):
     """Do not automatically follow redirects. Revalidate all URLs and DNS targets.
 
     Protects against basic SSRF. Public deployment still benefits from an egress firewall
@@ -55,6 +55,8 @@ def fetch(url: str, *, max_bytes=MAX_BYTES, timeout=(6, 11), max_redirects=4):
     current = url
     for _ in range(max_redirects + 1):
         checked_url(current)
+        if allow_url is not None and not allow_url(current):
+            return {"url": current, "status": 0, "text": "", "type": "", "error": "Blocked by robots policy"}
         with session.get(current, headers=headers, timeout=timeout, allow_redirects=False, stream=True) as response:
             if response.status_code in (301, 302, 303, 307, 308):
                 location = response.headers.get("location")
@@ -71,7 +73,14 @@ def fetch(url: str, *, max_bytes=MAX_BYTES, timeout=(6, 11), max_redirects=4):
                 if size > max_bytes:
                     return {"url": current, "status": response.status_code, "text": "", "type": content_type, "error": "Response exceeded byte limit"}
                 chunks.append(chunk)
-            response.encoding = response.apparent_encoding if response.encoding in (None,"ISO-8859-1") else response.encoding
+            # Decode bytes already buffered, without rereading a streamed response.
             data = b"".join(chunks)
-            return {"url": current, "status": response.status_code, "text": data.decode(response.encoding or "utf-8", errors="replace"), "type": content_type, "error": ""}
+            charset = response.encoding
+            if not charset or charset.lower() == "iso-8859-1":
+                charset = "utf-8"
+            try:
+                decoded = data.decode(charset, errors="replace")
+            except LookupError:
+                decoded = data.decode("utf-8", errors="replace")
+            return {"url": current, "status": response.status_code, "text": decoded, "type": content_type, "error": ""}
     return {"url": current, "status": 0, "text": "", "type": "", "error": "Too many redirects"}
