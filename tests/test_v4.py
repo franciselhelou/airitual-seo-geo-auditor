@@ -72,9 +72,10 @@ def test_citation_matching_and_provider_failure_not_negative():
         'gemini':lambda q:(_ for _ in ()).throw(ValueError('disabled'))}):
         with patch.dict('os.environ',{'AUDIT_BENCHMARK_QUESTIONS':'1'}):
             report=run_benchmarks(BASE,['Where do I apply for permits?'])
-    assert report['summary']['openai']['target_cited']==1
+    # Legacy prompts with no source URL / organization context are excluded.
+    assert report['summary']['openai']['target_cited']==0
     assert report['summary']['perplexity']['tests_completed']==0
-    assert next(x for x in report['results'] if x['provider']=='gemini')['target_cited'] is None
+    assert report['results']==[]  # No contextualized question was supplied
 
 
 def test_quality_gate_self_reference_and_empty_items():
