@@ -3,6 +3,7 @@
   "name": "airitual-seo-geo-auditor",
   "main": "src/worker.js",
   "compatibility_date": "2026-10-20",
+  "previews": {},
   "assets": {"directory": "./public", "binding": "ASSETS"},
   "r2_buckets": [{"binding": "AUDITS", "bucket_name": "airitual-audit-reports"}],
   "vars": {
