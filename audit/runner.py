@@ -12,6 +12,8 @@ from .intelligence import research_intelligence
 from .pdf_report import create_pdf
 from .quality import roadmap as build_roadmap, audit_quality
 from .benchmarks import run_benchmarks
+from .benchmark_questions import plan_questions
+from .scoring import seo_audit_score,geo_citation_score,action_counts
 
 
 def now():return datetime.datetime.now(datetime.timezone.utc).isoformat()
@@ -74,7 +76,12 @@ def execute(job,on_progress=lambda msg:None):
     on_progress("Preparing organization-specific SEO/GEO intelligence")
     intelligence=research_intelligence(website,[p for p in crawled["pages"] if p.get("status")==200],review,external,warnings,on_progress,discovered_urls=crawled.get("discovered_urls",[]))
     on_progress('Testing public AI search citations')
-    benchmarks=run_benchmarks(website,intelligence.get('geo_questions',[]),on_progress)
+    benchmark_questions=plan_questions(website,html_pages,intelligence.get('organization_type',''))
+    benchmarks=run_benchmarks(website,benchmark_questions,on_progress)
+    intelligence['geo_questions']=benchmark_questions  # Only grounded executable questions are shown.
+    on_progress('Calculating auditable SEO and GEO sample scores')
+    seo_detail=seo_audit_score(review,crawled['pages'],speeds)
+    geo_detail=geo_citation_score(benchmarks)
     for item in intelligence.get("research_findings",[]):
         sources=item.get("sources",[])
         if len(sources)<2:continue
@@ -85,7 +92,12 @@ def execute(job,on_progress=lambda msg:None):
                        kind="review",sources=[{"url":x["url"],"label":x["quote"][:155]} for x in sources],owner="Content owner / subject expert")
     review.findings.sort(key=lambda f:({"critical":0,"high":1,"medium":2,"low":3,"info":4}.get(f["severity"],5),f["category"]))
     findings=review.findings
+    action_summary=action_counts(findings,intelligence.get('content_opportunities',[]))
     summary=baseline_summary(website,findings,coverage,review.scores())
+    summary+=(f"\n\nMeasured sampled SEO audit: {seo_detail['score'] if seo_detail['score'] is not None else 'unavailable'}/100; "
+              f"valid API citation benchmark: {geo_detail['score'] if geo_detail['score'] is not None else 'unavailable'}/100 "
+              f"({geo_detail['cited']}/{geo_detail['valid_tests']} valid responses cited the domain). "
+              f"High-impact confirmed issues: {action_summary['urgent_verified']}; high-priority items to verify: {action_summary['high_priority_to_verify']}.")
     if intelligence.get("executive_analysis"):
         summary+="\n\nAI research interpretation (verify editorial claims): "+intelligence["executive_analysis"]
     pages=[{k:p.get(k) for k in ("url","status","error","title","description","h1","headings","word_count","images","images_missing_alt","canonical","robots","schema_types","duplicate_content_of","requested_url","image_evidence")} for p in crawled["pages"]]
@@ -93,7 +105,8 @@ def execute(job,on_progress=lambda msg:None):
     limitations=[
       "This is a bounded, public-HTML sample; pages excluded by robots rules, uncrawled subpages, dynamic content, media and authenticated content may be missed.",
       f"Retrieved {pages_evaluated} HTML pages; {coverage['urls_discovered']} URLs were discovered as crawl candidates, not verified indexable HTML pages. Candidate sample: {coverage['candidate_sample_percent']}% (not a site-wide coverage estimate).",
-      "The overall site-health score is intentionally not calculated from this bounded sample. Technical and on-page percentages are only observed check pass rates with disclosed denominators.",
+      "The sampled SEO audit score uses weighted observed public checks, with omitted tests disclosed. It is not a full-site Google rank or traffic estimate.",
+      "The GEO API citation rate excludes ungrounded questions, short or clarification-only answers and provider failures. It does not measure consumer AI app rankings.",
       "AI citation results, where present, are API-grounded question benchmarks, not consumer ChatGPT, Google AI Mode or Perplexity interface rankings.",
       "Equivalent main-text page aliases are excluded from on-page check denominators; valid SEO canonicals/redirects still require separate verification.",
       "Missing canonical declarations and optional meta descriptions are not automatically critical SEO defects.",
@@ -107,18 +120,19 @@ def execute(job,on_progress=lambda msg:None):
     limitations.extend(warnings[:18])
     # The original web frontend still reads scores/findings/roadmap; V2 adds optional intelligence sections.
     result={"audit_id":job.get("audit_id","local"),"status":"complete","website":website,
-            "created_at":job.get("created_at",now()),"completed_at":now(),"scores":review.scores(),"tests":review.tests,
+            "created_at":job.get("created_at",now()),"completed_at":now(),
+            "scores":{**review.scores(),"seo":seo_detail['score'],"geo":geo_detail['score']},"tests":review.tests,
             "coverage":coverage,"summary":summary,"findings":findings,"roadmap":build_roadmap(findings,intelligence.get("content_opportunities",[])),
             "pages":pages,"external_profiles":external,"pagespeed":speed,"pagespeed_results":speeds,
             "benchmarks":benchmarks,"intelligence":intelligence,
             "source_inventory": crawled.get('discovered_urls',[])[:400],
             "alias_records":crawled.get('alias_records',[]),
-            "quality": {"overall_health_measured": False, "geo_visibility_measured": bool(benchmarks.get("status")=="completed"),
+            "quality": {"overall_health_measured": False, "geo_visibility_measured": geo_detail['valid_tests']>0,
                         "ai_research_status": intelligence.get("ai_research_status"),
                         "assessment_scope": "bounded_public_html_sample",
                         "review_items": len([f for f in findings if f.get("kind") != "issue"]),
                         "confirmed_markup_issues": len([f for f in findings if f.get("kind") == "issue"])},
-            "limitations":limitations,"engine_version":"4.0.0"}
+            "limitations":limitations,"engine_version":"5.0.0"}
     result['quality_gate']=audit_quality(result)
     return result
 
