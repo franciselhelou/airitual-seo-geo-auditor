@@ -54,8 +54,9 @@ def test_failed_attempt_appears_in_denominator():
     p=doc(BASE, 'Home | Example')
     bad={'url':BASE+'/broken','status':0,'error':'ReadTimeout'}
     report=analyze_site(BASE,crawl(p,bad),[])
-    assert report.scores()['technical']==50
-    assert any('Failed HTML requests' in f['title'] for f in report.findings)
+    assert report.scores()['technical']==100  # Timeout is untested, not a confirmed website defect
+    assert report.tests['technical']['untested']==1
+    assert not any('Failed HTML requests' in f['title'] for f in report.findings)
 
 
 def test_short_pages_do_not_generate_numeric_geo_score():
