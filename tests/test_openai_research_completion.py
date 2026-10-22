@@ -44,7 +44,7 @@ def test_success_first_call(capsys):
     result, calls = run_with([FakeResponse(make_body('{"geo_questions":["Question?"]}'))])
     assert result['geo_questions'] == ['Question?']
     assert len(calls) == 1
-    assert calls[0][1]['json']['max_output_tokens'] == 8000
+    assert calls[0][1]['json']['max_output_tokens'] == 10000
     log = capsys.readouterr().out
     assert 'OpenAI research request: attempt=1/2' in log
     assert 'status=completed' in log
@@ -57,7 +57,7 @@ def test_incomplete_first_response_retried(capsys):
     ])
     assert result == {'foo':'complete'}
     assert len(calls) == 2
-    assert calls[1][1]['json']['max_output_tokens'] == 12000
+    assert calls[1][1]['json']['max_output_tokens'] == 15000
     assert 'incomplete_reason=max_output_tokens' in capsys.readouterr().out
 
 def test_malformed_json_retried(capsys):

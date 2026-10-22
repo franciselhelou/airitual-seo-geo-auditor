@@ -43,7 +43,9 @@ def test_crawl_scores_pdf():
         site=crawl_site("https://example.com/",max_pages=3)
     assert len(site["pages"])==2
     report=analyze_site("https://example.com/",site,[])
-    assert report.scores()["overall"] is not None
+    assert report.scores()["overall"] is None
+    assert report.scores()["geo"] is None
+    assert report.scores()["technical"] == 100
     result={"audit_id":"test","website":"https://example.com/","created_at":"2026-10-21","completed_at":"2026-10-21","scores":report.scores(),"summary":"Tested sample public site.","coverage":{"pages_crawled":2,"urls_discovered":2,"pages_failed":0},"findings":report.findings,"roadmap":[],"pages":site["pages"],"external_profiles":[],"limitations":[]}
     pdf=create_pdf(result)
     assert pdf[:4]==b"%PDF" and len(pdf)>1500
