@@ -1,5 +1,6 @@
 """AI Ritual V2 executive-first, source-linked PDF report; rendered from same JSON as frontend."""
 from io import BytesIO
+import re
 from collections import Counter
 from html import escape
 from urllib.parse import urlparse
@@ -33,6 +34,18 @@ def create_pdf(r):
         return Paragraph(escape(str(s if s is not None else "")).replace("\n","<br/>"),styles[sty])
     def head(s):story.append(p(s,"HeadV2"))
     def mini(s):story.append(p(s,"MiniV2"))
+    def plain_ai(s):
+        s=str(s or '')
+        s=re.sub(r'\[([^]\n]+)\]\((https?://[^)]+)\)',r'\1',s)
+        s=re.sub(r'(?<!\w)\*\*([^*]+)\*\*',r'\1',s)
+        s=re.sub(r'(?<!\w)\*([^*]+)\*',r'\1',s)
+        s=re.sub(r'(?<!\w)\[[0-9]+\]', '', s)
+        return re.sub(r'\s+', ' ', s).strip()
+    def answer_summary(answer):
+        value=plain_ai(answer)
+        sentences=re.split(r'(?<=[.!?])\s+',value)
+        selected=' '.join(sentences[:2])
+        return selected if len(selected)<=850 else selected[:850].rsplit(' ',1)[0]+'…'
     def txt(s):story.append(p(s))
     def li(s):story.append(p("• "+str(s)))
     def cell(s):return p(s,"CellV2")
@@ -67,6 +80,8 @@ def create_pdf(r):
         p("Scope: bounded public-web audit. Measured AI citations, where available, reflect only the documented API tests.","SmallV2"),PageBreak()])
 
     head("01  Executive assessment")
+    if r.get('publication_status')=='draft_validation_required' or (r.get('quality_gate') or {}).get('status')=='needs_review':
+        txt("DRAFT — Quality checks require review. Do not distribute as a final client assessment.")
     txt(r.get("summary","No executive summary provided."))
     mini("Decision metrics — public sample only")
     detail=r.get('score_details') or {}
@@ -85,6 +100,7 @@ def create_pdf(r):
         f"AI calls attempted: {geo.get('attempts',0)}; valid citation tests: {geo.get('valid_tests',0)}. "
         "These are transparent audit measures, not verified whole-site rankings or search traffic.")
     if seo.get('breakdown'):
+        txt(seo.get('weight_policy','Weighted observed checks; unmeasured categories excluded.'))
         mini('SEO scoring details')
         table([["Observed check","Pass rate","Sample"]]+[
             [i['check'].replace('_',' ').title(),str(i['result_percent'])+'%',str(i['samples'])]
@@ -160,22 +176,31 @@ def create_pdf(r):
     summaries=benchmark.get('summary') or {}
     if summaries:
         mini("Measured citations by API provider")
-        table([["Provider","Tests completed","Domain cited"]]+[
-            [provider,str(item.get('tests_completed',0)),
-             str(item.get('target_cited',0))+" / "+str(item.get('tests_completed',0)) if item.get('tests_completed') else 'Unavailable']
-            for provider,item in summaries.items()],widths=[190,148,page_width-338])
-        for item in (benchmark.get('results') or [])[:24]:
+        table([["Provider","Valid / attempted","Target cited","Provider errors"]]+[
+            [provider, str(item.get('tests_completed',0))+" / "+str(item.get('attempts',0)),
+             str(item.get('target_cited',0))+" / "+str(item.get('tests_completed',0)) if item.get('tests_completed') else 'Not measured',
+             str(item.get('errors',0))] for provider,item in summaries.items()],
+             widths=[100,135,125,page_width-360])
+        for item in (benchmark.get('results') or []):
+            if item.get('status')=='api_error':
+                txt(f"{item.get('provider','').title()} API failure: HTTP {item.get('http_status','unknown')}; "
+                    f"{item.get('error_type','provider error')} ({item.get('error_code','unknown')}): "
+                    f"{item.get('error_message','')}")
+            elif item.get('status') in ('unverifiable_sources','invalid_answer'):
+                txt(f"{item.get('provider','').title()} excluded benchmark: {item.get('validation_reason', item['status'])}.")
+        mini('Representative verified API responses')
+        for item in (benchmark.get('results') or []):
             if item.get('status')!='completed' or not item.get('valid_answer'):continue
-            mini(item.get('provider','')+" — "+item.get('question','')[:100])
-            txt('Domain cited: '+('Yes' if item.get('target_cited') else 'No')+'. Answer excerpt: '+item.get('answer','')[:340])
-            for cite in item.get('citations',[])[:4]:story.append(link(cite.get('url','')))
-    else:txt("No public AI API benchmark results are available for this audit.")
-    mini("Source-linked public benchmark prompts")
-    questions=intel.get("geo_questions",[])
+            mini(item.get('provider','').title()+" — "+item.get('question',''))
+            txt('Target cited: '+('Yes' if item.get('target_cited') else 'No')+'. '+answer_summary(item.get('answer','')))
+            for cite in item.get('citations',[])[:3]:story.append(link(cite.get('url','')))
+    else:txt("No verifiable public AI API citations returned for this audit.")
+    mini("Source-grounded benchmark questions")
+    questions=(benchmark.get('questions') or intel.get('geo_questions') or [])
     if questions:
-        for q in questions[:8]:
-            li(q.get("question","") if isinstance(q,dict) else str(q))
-    else:txt("AI benchmark questions were not generated.")
+        for item in questions[:8]:
+            li((item.get('segment','discovery').title()+': '+item.get('question','')) if isinstance(item,dict) else str(item))
+    else:txt("No source-grounded questions were available; no benchmark score was assigned.")
 
     head("06  Prioritized content opportunities")
     txt("Recommendations below are hypotheses supported by source excerpts. Check related existing pages before commissioning content.")
@@ -202,15 +227,16 @@ def create_pdf(r):
     txt("Detected JSON-LD types in sampled responses: "+(", ".join(observed) if observed else "None detected; rendered markup was not independently checked."))
     txt("Before implementing JSON-LD, validate the current rendered markup and choose an organization type supported by the site's publicly stated identity. No search enhancements are guaranteed.")
 
-    head("10  Prioritized 90-day work plan")
+    head("09  Prioritized 90-day work plan")
     for phase in r.get("roadmap",[]):
         mini(phase.get("period",""))
         for task in phase.get("tasks",[])[:12]:li(task)
 
-    head("11  Audit scope and supporting records")
+    head("10  Audit scope and supporting records")
     txt("The downloadable structured JSON result retains each sampled page, excluded document, provider response, citation and source evidence. Page inventories and optional profiles are not repeated as client-facing report sections.")
     quality=r.get('quality_gate') or {}
-    txt('Evidence quality gate: '+str(quality.get('status','not_run'))+'. Public-only bounded crawl; independently verify high-impact corrections.')
+    txt('Evidence quality gate: '+str(quality.get('status','not_run'))+'. '+
+        ('DRAFT — do not distribute before review.' if r.get('publication_status')=='draft_validation_required' else 'Passed automated report checks; substantive claims still require review.'))
     speed_results=r.get('pagespeed_results') or []
     if speed_results:
         mini('Public mobile PageSpeed tests')
